@@ -1,0 +1,93 @@
+---
+title: "First R notebook for Ames housing dataset"
+output:
+  html_document:
+    df_print: paged
+---
+
+
+
+```{r}
+#Data preprocessing
+#importing the libraries 
+library(ggplot2)
+library(plyr)
+library(dplyr)
+library(corrplot)
+library(caret)
+library(randomForest)
+library(xgboost)
+```
+```{r}
+#importing the train and test datasets
+train <- read.csv("train.csv", stringsAsFactors = F)
+test <- read.csv("test.csv", stringsAsFactors = F)
+head(train)
+
+```
+```{r}
+dim(train)
+```
+```{r}
+str(train)
+```
+```{r}
+testids <- test$Id
+test$Id <- NULL
+train$Id <- NULL
+test$SalePrice <- NA
+ncol(test)
+ncol(train)
+```
+```{r}
+#Combining the train and test sets
+combined <- rbind(train, test) 
+```
+```{r}
+#examining the distribution of dependent variable
+#p <- hist(combined$SalePrice, main = "Histogram of Sale Prices", xlab = "SalePrice")
+ggplot(data = combined, aes(x = SalePrice)) + geom_histogram(binwidth = 10000) + scale_x_continuous(breaks = seq(0,800000, by=100000))
+
+```
+```{r}
+numeric <- which(sapply(combined, is.numeric))
+numericvars <- combined[,numeric]
+numericvars
+correlation_numericvars <- cor(numericvars, use = "pairwise.complete.obs")
+```
+```{r}
+correlation_sorted <- as.matrix(sort(correlation_numericvars[, 'SalePrice'], decreasing = TRUE))
+highcorrelation <- names(which(apply(correlation_sorted, 1, function(x) abs(x)>0.5)))
+correlation_numericvars <- correlation_numericvars[highcorrelation, highcorrelation]
+```
+```{r}
+#getting a heatmap
+corrplot.mixed(correlation_numericvars, tl.col='Black', tl.pos = 'lt')
+```
+
+#The variables which have maximum correlation with SalePrice(dependent variable) are OverallQual and GrLivArea
+#Now we should examine the variation of Sale Price with these two variables
+```{r}
+ggplot(data=combined[!is.na(combined$SalePrice),], aes(x=factor(OverallQual), y=SalePrice))+
+        geom_boxplot() + labs(x='Overall Quality') +
+        scale_y_continuous(breaks= seq(0, 800000, by=100000))
+
+```
+*As expected there is positive correlation between Overall quality and Sale price. Also, there is an upward curve for the same.*
+
+```{r}
+ggplot(data=combined[!is.na(combined$SalePrice),], aes(x=GrLivArea, y=SalePrice))+
+        geom_point(col='blue') + geom_smooth(method = "lm", se=FALSE, color="black", aes(group=1)) +
+        scale_y_continuous(breaks= seq(0, 800000, by=100000))
+```
+*there seems to be two observations with very large value for living area but less sale price. Can we think of that as an outlier?*
+*to determine if these two observations can be omitted, we need to look at other factors and to do so we have to find out which observations they are*
+
+```{r}
+library(ggrepel)
+ggplot(data=combined[!is.na(combined$SalePrice),], aes(x=GrLivArea, y=SalePrice))+
+        geom_point(col='blue') + geom_smooth(method = "lm", se=FALSE, color="black", aes(group=1)) +
+        scale_y_continuous(breaks= seq(0, 800000, by=100000)) +
+        geom_text_repel(aes(label = ifelse(combined$GrLivArea[!is.na(combined$SalePrice)]>4500, rownames(all), '')))
+```
+
